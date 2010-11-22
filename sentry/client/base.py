@@ -35,8 +35,16 @@ class SentryClient(object):
         if settings.THRASHING_TIMEOUT and settings.THRASHING_LIMIT:
             cache_key = 'sentry:%s:%s' % (kwargs.get('class_name'), checksum)
             added = cache.add(cache_key, 1, settings.THRASHING_TIMEOUT)
-            if not added and cache.incr(cache_key) > settings.THRASHING_LIMIT:
-                return
+            if not added:
+                try:
+                    thrash_count = cache.incr(cache_key)
+                except ValueError:
+                    # cache.incr can fail. Assume we aren't thrashing yet, and
+                    # if we are, hope that the next error has a successful
+                    # cache.incr call.
+                    thrash_count = 0
+                if thrash_count > settings.THRASHING_LIMIT:
+                    return
 
         return self.send(**kwargs)
 
